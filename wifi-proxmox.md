@@ -76,7 +76,6 @@ wpa_passphrase "NouveauRéseau" "NouveauMotDePasse" >> /etc/wpa_supplicant.conf
 ```bash
 nano /etc/wpa_supplicant.conf
 # Supprimer le bloc network={...} correspondant
-# Ctrl+O pour sauvegarder, Ctrl+X pour quitter
 ```
 
 ### Définir une priorité entre plusieurs réseaux
@@ -105,11 +104,9 @@ p2p_disabled=1
 ip link set wlp4s0 up
 ```
 
-### Vérifier que le firmware est chargé
 
-```bash
-dmesg | grep iwlwifi
-```
+
+
 
 ### Vérifier l'état de la connexion
 
