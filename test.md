@@ -29,7 +29,23 @@ wpa_passphrase "NomDuRéseau" "MotDePasse" > /etc/wpa_supplicant.conf
 connecte 
 wpa_supplicant -B -i wlp4s0 -c /etc/wpa_supplicant.conf  
 
-dhclient wlp4s0
+dhclient wlp4s0  
+
+# Titre h1
+## Titre h2
+### Titre h3
+
+> Texte en citation/note
+
+**gras**
+`code inline`
+
+```bash
+bloc de code avec coloration syntaxique
+```
+
+---   ← ligne de séparation
+
 
 
 
