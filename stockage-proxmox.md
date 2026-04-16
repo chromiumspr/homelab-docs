@@ -1,36 +1,13 @@
-# Documentation Proxmox Homelab — srv-proxmox-01
-
-## Matériel
-
-| Composant | Détail |
-|-----------|--------|
-| NVMe | Micron 2200S 512GB |
-| SATA SSD x3 | Intel SSDSC2KF256G8 256GB chacun |
-
----
+# Stockage Proxmox
 
 ## 1. Installation de Proxmox
 
 ### Prérequis BIOS
-- Le NVMe n'était pas détecté car le BIOS était en mode **Intel RST/VMD**
-- Solution : passer en mode **AHCI pur** dans le BIOS
-- Le message kernel `ahci: Found 1 remapped NVMe devices` indique ce problème
+- Passer en mode **AHCI pur** dans le BIOS pour que le NVMe soit détecté
 
-### Flasher la clé USB d'installation
-- ISO : https://www.proxmox.com/en/downloads
-- Avec **Rufus** : mode GPT, UEFI, écriture en DD Image mode
 
-### Paramètres d'installation
-```
-Target disk  : NVMe (nvme0n1)
-Filesystem   : ext4
-Hostname     : srv-proxmox-01.local
-IP           : fixe (ex: 192.168.1.X/24)
-```
-
----
-
-## 2. Configuration post-installation
+### Clé bootable
+- ISO PRoxmox et **Rufus** : mode GPT, UEFI, écriture en DD Image mode
 
 ### Accès web
 ```
@@ -51,37 +28,9 @@ echo "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription" \
 apt update && apt full-upgrade -y
 ```
 
-> Le popup "No valid subscription" au login est normal et non bloquant.
-
-### Créer un utilisateur admin (non-root)
-```bash
-useradd -m -s /bin/bash dani
-passwd dani
-usermod -aG sudo dani
-pveum user add dani@pam
-pveum aclmod / -user dani@pam -role Administrator
-```
-
-### Changer le hostname
-```bash
-hostnamectl set-hostname srv-proxmox-01
-
-# Mettre à jour /etc/hosts
-nano /etc/hosts
-# Remplacer l'ancienne entrée par :
-# 127.0.1.1    srv-proxmox-01.local    srv-proxmox-01
-
-# Redémarrer les services Proxmox
-systemctl restart pve-cluster pvedaemon pveproxy
-
-# Vérifier
-hostname
-hostname -f
-```
-
 ---
 
-## 3. Effacement sécurisé des disques SATA
+## 2. Effacement sécurisé des disques SATA
 
 Les disques contenaient potentiellement des données professionnelles.
 
@@ -95,17 +44,12 @@ apt install hdparm -y
 hdparm -I /dev/sda | grep -i erase
 ```
 
-### Si Secure Erase supporté (recommandé)
+### Si Secure Erase supporté 
 ```bash
 hdparm -y /dev/sda
 hdparm --security-set-pass TEMP /dev/sda
 hdparm --security-erase TEMP /dev/sda
-# Répéter pour sdb et sdc
-```
-
-### Si non supporté — remplissage par zéros
-```bash
-dd if=/dev/zero of=/dev/sda bs=4M status=progress
+# Répéter pour sur les autres disques
 ```
 
 ### Finaliser le wipe
@@ -123,23 +67,16 @@ lsblk
 
 ---
 
-## 4. Architecture de stockage
+## 3. Architecture de stockage
 
 ```
 NVMe 512GB (nvme0n1)     → VMs / LXC actifs   [local-lvm, LVM-Thin]
 SATA SSD x3 256GB        → Backups, ISOs, NAS  [zfs-data, RAIDZ1]
 ```
 
-| Stockage | Espace utile | Redondance |
-|----------|-------------|------------|
-| `local-lvm` (NVMe) | ~349GB | ❌ |
-| `zfs-data` (3×SATA RAIDZ1) | ~512GB | ✅ 1 disque |
+## 4. Création du pool ZFS RAIDZ1 (RAID 5)
 
----
-
-## 5. Création du pool ZFS RAIDZ1
-
-### Bonne pratique — utiliser les IDs disques
+### Chercher les IDs des disques
 ```bash
 ls /dev/disk/by-id/ | grep -v part
 ```
@@ -167,7 +104,7 @@ zpool list
 
 ---
 
-## 6. Création des datasets ZFS
+## 5. Création des datasets ZFS
 
 ```bash
 zfs create zfs-data/backups   # Sauvegardes VMs/LXC
@@ -182,7 +119,7 @@ zfs list
 
 ---
 
-## 7. Déclaration des stockages dans Proxmox
+## 6. Déclaration des stockages dans Proxmox
 
 ### Via l'UI
 ```
@@ -219,7 +156,7 @@ local-lvm  lvmthin  active
 
 ---
 
-## 8. Gestion future des disques ZFS
+## 7. Gestion future des disques ZFS
 
 ### Remplacer un disque défaillant
 ```bash
@@ -227,7 +164,7 @@ zpool replace zfs-data /dev/sda /dev/sde
 # ZFS rebuild automatique (resilver)
 ```
 
-### Ajouter de l'espace (2ème vdev)
+### Ajouter de l'espace 
 ```bash
 # Ajouter 3 nouveaux disques en 2ème RAIDZ1
 zpool add zfs-data raidz1 /dev/sde /dev/sdf /dev/sdg
@@ -251,12 +188,3 @@ zpool destroy zfs-data
 
 ---
 
-## 9. Points clés et erreurs à éviter
-
-| Problème | Cause | Solution |
-|----------|-------|---------|
-| NVMe non détecté | BIOS en mode Intel RST/VMD | Passer en AHCI |
-| Pool ZFS introuvable à l'import | Mauvais nom ou disques non trouvés | Utiliser `/dev/disk/by-id/` |
-| `local` storage ne se supprime pas | Protection Proxmox native | Le désactiver avec `pvesm set local --disable 1` |
-| Erreur `in use` à la création ZFS | Ancien pool non détruit | `zpool destroy ancien-pool` puis recréer |
-| Renommer un pool ZFS | `zpool export` + `zpool import ancien nouveau` | Faire avant toute utilisation |
