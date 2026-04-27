@@ -1,18 +1,12 @@
 # pfSense — Règles Firewall
 
-**Projet** : Homelab `srv-proxmox-01`  
-**Version** : 1.0  
-**Date** : 2026-04-27  
-**Auteur** : dani
-
----
 
 ## Politique générale
 
-- **Deny-all implicite** sur toutes les interfaces (comportement pfSense par défaut)
-- Les règles s'appliquent sur l'**interface source** (là où le trafic est initié)
+- **Deny-all implicite** sur toutes les interfaces 
+- Les règles s'appliquent sur l'**interface source** 
 - pfSense est **stateful** — les réponses aux connexions autorisées passent automatiquement sans règle de retour explicite
-- L'ordre des règles est **critique** — pfSense applique la première règle correspondante
+- L'ordre des règles est **critique** — pfSense lis de haut en bas
 
 ---
 
@@ -22,14 +16,14 @@
 
 | Nom | Valeur | Description |
 |-----|--------|-------------|
-| `NET_MGMT` | 10.10.10.0/24 | VLAN10 Management |
+| `NET_MGMT` | 10.10.10.0/24 | VLAN10 MNGMT |
 | `NET_LAN` | 10.10.20.0/24 | VLAN20 LAN |
-| `NET_SVC` | 10.10.30.0/24 | VLAN30 Services |
+| `NET_SVC` | 10.10.30.0/24 | VLAN30 SVC |
 | `NET_DMZ` | 10.10.40.0/24 | VLAN40 DMZ |
-| `NET_CYB` | 10.10.50.0/24 | VLAN50 Cyber |
-| `NET_FUNLAB` | 10.10.60.0/24 | VLAN60 FunLab |
-| `NET_BCKP` | 10.10.70.0/24 | VLAN70 Backup |
-| `NET_RFC1918` | 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 | Toutes IPs privées |
+| `NET_CYB` | 10.10.50.0/24 | VLAN50 CYB |
+| `NET_FUNLAB` | 10.10.60.0/24 | VLAN60 FUNLAB |
+| `NET_BCKP` | 10.10.70.0/24 | VLAN70 BCKP |
+| `NET_PRIVATE_IPs` | 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 | Toutes IPs privées |
 | `NET_ALL_VLANS` | 10.10.10.0/24 → 10.10.70.0/24 | Tous les VLANs internes |
 
 ### Hôtes (type : Host)
@@ -38,10 +32,6 @@
 |-----|----|-------------|
 | `HOST_PROXMOX` | 10.10.10.10 | Proxmox VE (interface MGMT) |
 | `HOST_PFSENSE_MGMT` | 10.10.10.1 | pfSense gateway MGMT |
-| `HOST_PIHOLE` | 10.10.30.x | PiHole (à compléter à l'install) |
-| `HOST_NPM_SVC` | 10.10.30.x | NPM interne SVC (à compléter) |
-| `HOST_NPM_DMZ` | 10.10.40.x | NPM DMZ (à compléter) |
-| `HOST_PBS` | 10.10.70.x | Proxmox Backup Server (à compléter) |
 
 ### Ports (type : Port)
 
@@ -56,8 +46,6 @@
 | `PORT_PLEX` | 32400 | Plex Media Server |
 | `PORT_BACKUP` | 8007 | Proxmox Backup Server |
 
-> **Note** : Les aliases de port ne s'utilisent pas via le menu déroulant pfSense — taper le nom directement dans le champ **Custom** du Destination Port Range pour l'autocomplétion.
-
 ---
 
 ## Règles WAN
@@ -68,10 +56,8 @@
 |---|--------|-------|--------|-------------|------|-------------|
 | 1 | Block | TCP | * | WAN address | 443 | Bloquer accès pfSense depuis Internet |
 | 2 | Block | TCP | * | WAN address | 8006 | Bloquer accès Proxmox depuis Internet |
-| 3 | Block | * | `NET_RFC1918` | * | * | Anti-spoofing IP privées en entrée |
+| 3 | Block | * | `NET_PRIVATE_IPs` | * | * | Anti-spoofing IP privées en entrée |
 | 4 | Pass | UDP | * | WAN address | 51820 | WireGuard entrant |
-
-> **À ajouter lors du déploiement Plex** : `Pass TCP/UDP * → WAN address : 32400` + NAT Port Forward vers `HOST_NPM_DMZ`.
 
 ---
 
@@ -79,8 +65,7 @@
 
 **Firewall → Rules → VLAN10_MGMT**
 
-**Politique** : Admin only — accès strict aux interfaces d'administration uniquement. Aucun accès Internet, aucun accès aux autres VLANs.
-
+**Politique** : Admin only — accès strict aux interfaces d'administration uniquement. 
 | # | Action | Proto | Source | Destination | Port | Description |
 |---|--------|-------|--------|-------------|------|-------------|
 | 1 | Pass | TCP | `NET_MGMT` | `HOST_PROXMOX` | 8006 | Accès interface web Proxmox |
@@ -111,7 +96,7 @@
 | 8 | Pass | TCP | `NET_LAN` | * | 80, 443 | Accès Internet |
 | 9 | Block | * | `NET_LAN` | * | * | Deny tout le reste |
 
-> Les machines LAN accèdent aux services SVC **uniquement via NPM** (règle 7). Tout accès direct à une IP SVC sur un port non-443 est bloqué par la règle 9.
+> Les machines LAN accèdent aux services SVC **uniquement via NPM** . Tout accès direct à une IP SVC sur un port non-443 est bloqué par la règle 9.
 
 ---
 
@@ -119,7 +104,7 @@
 
 **Firewall → Rules → VLAN30_SVC**
 
-**Politique** : Les services peuvent accéder à Internet pour les mises à jour. Aucune initiation de connexion vers les autres VLANs. Le trafic entrant (réponses aux requêtes LAN/FUNLAB) est géré automatiquement par le stateful firewall.
+**Politique** : Les services peuvent accéder à Internet pour les mises à jour. Aucune initiation de connexion vers les autres VLANs. 
 
 | # | Action | Proto | Source | Destination | Port | Description |
 |---|--------|-------|--------|-------------|------|-------------|
@@ -142,9 +127,9 @@
 
 | # | Action | Proto | Source | Destination | Port | Description |
 |---|--------|-------|--------|-------------|------|-------------|
-| 1 | Block | * | `NET_DMZ` | `NET_RFC1918` | * | Deny DMZ → tout le réseau privé (RFC1918) |
+| 1 | Block | * | `NET_DMZ` | `NET_PRIVATE_IPs` | * | Deny DMZ → tout le réseau privé |
 | 2 | Pass | TCP/UDP | `NET_DMZ` | * | 53 | DNS sortant (resolver externe) |
-| 3 | Pass | TCP | `NET_DMZ` | * | 80, 443 | Accès Internet (mises à jour) |
+| 3 | Pass | TCP | `NET_DMZ` | * | 80, 443 | Accès Internet |
 | 4 | Block | * | `NET_DMZ` | * | * | Deny tout le reste |
 
 > **Important** : La règle 1 doit être en **première position** — elle bloque également l'accès à PiHole (SVC). Le DNS DMZ utilise donc un resolver externe (1.1.1.1 ou 8.8.8.8).
@@ -161,7 +146,7 @@
 |---|--------|-------|--------|-------------|------|-------------|
 | 1 | Block | * | `NET_CYB` | `NET_ALL_VLANS` | * | Deny CYB → tous les VLANs internes |
 | 2 | Pass | TCP/UDP | `NET_CYB` | * | 53 | DNS sortant |
-| 3 | Pass | TCP | `NET_CYB` | * | 80, 443 | Accès Internet uniquement |
+| 3 | Pass | TCP | `NET_CYB` | * | 80, 443 | Accès Internet |
 | 4 | Block | * | `NET_CYB` | * | * | Deny tout le reste |
 
 > **Option** : Pour des labs offensifs (scans, exploits), désactiver les règles 2 et 3 via le bouton **Toggle** pour passer en mode fully isolated temporairement.
