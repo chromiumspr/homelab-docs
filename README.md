@@ -33,6 +33,12 @@ homelab-docs/
 │   └── docker/
 └── network-diagrams/
 └── homelab-architecture.html
+
+chromiumspr.github.io avant /homelab-docs pour visualiser le html  
 ```
+
+chromiumspr.github.io avant /homelab-docs pour visualiser le html 
 📊 Diagramme
 👉 Voir l'architecture réseau
+
+chromiumspr.github.io avant /homelab-docs pour visualiser le html
