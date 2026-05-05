@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homelab Architecture v4.0</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:      #0a0c10;
+    --bg2:     #0f1218;
+    --bg3:     #141820;
+    --border:  rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --mono:    'JetBrains Mono', monospace;
+    --sans:    'Space Grotesk', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 40px 24px 60px;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    max-width: 980px;
+    margin: 0 auto 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-left h1 { font-size: 22px; font-weight: 600; letter-spacing: -.3px; color: #fff; }
+  .header-left p  { font-size: 12px; color: var(--muted); margin-top: 5px; font-family: var(--mono); }
+  .header-right   { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .hw-pill {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    background: var(--bg3); border: 1px solid var(--border);
+    padding: 3px 10px; border-radius: 20px;
+  }
+
+  /* ── Grid ── */
+  .grid { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 980px; margin: 0 auto; }
+  .full-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .two-row  { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── Card ── */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 15px;
+  }
+  .card-label { font-family: var(--mono); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 5px; }
+  .card-title { font-size: 13px; font-weight: 600; color: #fff; line-height: 1.3; }
+  .card-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+
+  /* ── Arrow ── */
+  .arrow-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; height: 18px; color: var(--muted); font-size: 12px;
+  }
+  .arrow-row::before, .arrow-row::after {
+    content: ''; flex: 1; height: 1px; background: var(--border); max-width: 360px;
+  }
+
+  /* ── Proxmox wrapper ── */
+  .proxmox-wrap { border: 1px dashed var(--border2); border-radius: 14px; padding: 16px; }
+  .proxmox-label {
+    font-family: var(--mono); font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px;
+  }
+
+  /* ── pfSense ── */
+  .pfsense {
+    background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 13px 15px; margin-bottom: 12px;
+  }
+  .pfsense-title { font-size: 13px; font-weight: 600; color: #fff; }
+  .pfsense-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+  .wg-row        { display: flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; }
+  .wg-pill {
+    font-family: var(--mono); font-size: 10px; font-weight: 500;
+    padding: 3px 10px; border-radius: 20px;
+    border: 1px dashed rgba(245,158,11,0.4);
+    color: #f59e0b; background: rgba(245,158,11,0.06);
+  }
+  .wg-pill.normal {
+    border-color: rgba(99,179,237,0.4);
+    color: #63b3ed; background: rgba(99,179,237,0.06);
+  }
+
+  /* ── Section separator ── */
+  .section-sep {
+    font-family: var(--mono); font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    margin: 4px 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── VLAN grid ── */
+  .vlan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── VLAN block ── */
+  .vlan { border-radius: 10px; padding: 12px 13px; border-width: 1px; border-style: solid; }
+  .vlan-head { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; flex-wrap: wrap; }
+  .vlan-name { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+  .vlan-cidr { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .vlan-gw   { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: auto; opacity: .55; }
+
+  .svc-list  { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .svc-tag   { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 5px; border: 1px solid; white-space: nowrap; }
+
+  .rules     { padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.05); }
+  .rule-line { font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.85; display: flex; gap: 6px; }
+  .permit    { color: #10b981; font-weight: 700; flex-shrink: 0; }
+  .deny      { color: #ef4444; font-weight: 700; flex-shrink: 0; }
+
+  /* ── Badges ── */
+  .badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px; margin-left: 3px;
+    vertical-align: middle; text-transform: uppercase;
+  }
+  .badge-admin   { background: rgba(245,158,11,0.2);  color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+  .badge-ro      { background: rgba(99,179,237,0.2);  color: #63b3ed; border: 1px solid rgba(99,179,237,0.3); }
+  .badge-backend { background: rgba(139,92,246,0.2);  color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); }
+
+  /* ── Cross-VLAN note ── */
+  .xvlan-note {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 7px; padding: 8px 11px; margin-top: 8px;
+    font-family: var(--mono); font-size: 10px; color: #c4b5fd; line-height: 1.6;
+  }
+
+  /* ── Color themes ── */
+  .v-mngmt { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.22); }
+  .n-mngmt { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  .s-mngmt { background: rgba(245,158,11,0.09); color: #fbbf24; border-color: rgba(245,158,11,0.28); }
+
+  .v-lan { background: rgba(59,130,246,0.07); border-color: rgba(59,130,246,0.22); }
+  .n-lan { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .s-lan { background: rgba(59,130,246,0.09); color: #60a5fa; border-color: rgba(59,130,246,0.28); }
+
+  .v-svc { background: rgba(16,185,129,0.07); border-color: rgba(16,185,129,0.22); }
+  .n-svc { background: rgba(16,185,129,0.15); color: #34d399; }
+  .s-svc { background: rgba(16,185,129,0.09); color: #34d399; border-color: rgba(16,185,129,0.28); }
+
+  .v-dmz { background: rgba(249,115,22,0.07); border-color: rgba(249,115,22,0.22); }
+  .n-dmz { background: rgba(249,115,22,0.15); color: #fb923c; }
+  .s-dmz { background: rgba(249,115,22,0.09); color: #fb923c; border-color: rgba(249,115,22,0.28); }
+
+  .v-fun { background: rgba(132,204,22,0.07); border-color: rgba(132,204,22,0.22); }
+  .n-fun { background: rgba(132,204,22,0.15); color: #a3e635; }
+  .s-fun { background: rgba(132,204,22,0.09); color: #a3e635; border-color: rgba(132,204,22,0.28); }
+
+  .v-cyb { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.22); }
+  .n-cyb { background: rgba(239,68,68,0.15); color: #f87171; }
+  .s-cyb { background: rgba(239,68,68,0.09); color: #f87171; border-color: rgba(239,68,68,0.28); }
+
+  .v-bck { background: rgba(139,92,246,0.07); border-color: rgba(139,92,246,0.22); }
+  .n-bck { background: rgba(139,92,246,0.15); color: #a78bfa; }
+  .s-bck { background: rgba(139,92,246,0.09); color: #a78bfa; border-color: rgba(139,92,246,0.28); }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 7px 18px;
+    padding: 13px 15px; background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  .leg-item { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .leg-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  @media (max-width: 680px) {
+    .vlan-grid, .full-row, .two-row { grid-template-columns: 1fr; }
+    .header { flex-direction: column; gap: 12px; }
+    .header-right { align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Homelab Architecture</h1>
+    <p>Proxmox VE · pfSense · 7 VLANs · v4.0 finale</p>
+  </div>
+  <div class="header-right">
+    <span class="hw-pill">NVMe 512 Go — système Proxmox</span>
+    <span class="hw-pill">ZFS RAIDZ1 3×256 Go — données</span>
+    <span class="hw-pill">Switch manageable 8 ports</span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- Couche physique -->
+  <div class="full-row">
+    <div class="card">
+      <div class="card-label">Internet</div>
+      <div class="card-title">Routeur FAI</div>
+      <div class="card-sub">NAT · Port forwarding 443 → IP NPM DMZ uniquement</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Réseau physique</div>
+      <div class="card-title">Switch manageable 8 ports</div>
+      <div class="card-sub">Trunk tagged (tous VLANs) → Proxmox · Access VLAN 20 → PC · Access VLAN 70 → NAS ext.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Hyperviseur</div>
+      <div class="card-title">Proxmox VE</div>
+      <div class="card-sub">LVM-Thin NVMe → VMs actives · ZFS pool <code style="font-family:var(--mono);font-size:10px;opacity:.8">zfs-data</code> → backups · iso · nas</div>
+    </div>
+  </div>
+
+  <div class="arrow-row">↕</div>
+
+  <!-- Proxmox -->
+  <div class="proxmox-wrap">
+    <div class="proxmox-label">Serveur Proxmox — VMs &amp; Conteneurs LXC</div>
+
+    <!-- pfSense -->
+    <div class="pfsense">
+      <div class="pfsense-title">VM pfSense — Routeur / Firewall inter-VLAN</div>
+      <div class="pfsense-sub">Passerelle 10.10.x.1 sur chaque VLAN · Deny inter-VLAN par défaut · DNS forwarder → PiHole SVC<br>
+      Fallback urgence : accès Proxmox UI direct depuis LAN si pfSense down</div>
+      <div class="wg-row">
+        <span class="wg-pill">WireGuard admin → tout MNGMT</span>
+        <span class="wg-pill normal">WireGuard normal → SVC:443 proxy interne uniquement</span>
+      </div>
+    </div>
+
+    <!-- Zone admin -->
+    <div class="section-sep">Zone administration — WireGuard admin requis</div>
+
+    <div class="vlan v-mngmt" style="margin-bottom:10px">
+      <div class="vlan-head">
+        <span class="vlan-name n-mngmt">MNGMT</span>
+        <span class="vlan-cidr">VLAN 10 · 10.10.10.0/24</span>
+        <span class="vlan-gw">gw .10.1</span>
+      </div>
+      <div class="svc-list">
+        <span class="svc-tag s-mngmt">Proxmox UI</span>
+        <span class="svc-tag s-mngmt">pfSense UI</span>
+        <span class="svc-tag s-mngmt">Switch UI</span>
+        <span class="svc-tag s-mngmt">Portainer</span>
+        <span class="svc-tag s-mngmt">Prometheus <span class="badge badge-backend">backend</span></span>
+      </div>
+      <div class="rules">
+        <div class="rule-line"><span class="permit">permit</span> WireGuard admin → tout MNGMT</div>
+        <div class="rule-line"><span class="permit">permit</span> SVC:9090 ← MNGMT (Grafana scrape Prometheus)</div>
+        <div class="rule-line"><span class="permit">permit</span> MNGMT → tous VLANs:9100 (scraping node_exporter)</div>
+        <div class="rule-line"><span class="permit">permit</span> MNGMT → SVC:53 (PiHole DNS)</div>
+        <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> tout autre trafic → MNGMT</div>
+      </div>
+    </div>
+
+    <!-- Zone services réseau -->
+    <div class="section-sep">Zone services réseau — accessible depuis LAN</div>
+
+    <div class="vlan-grid" style="margin-bottom:10px">
+
+      <div class="vlan v-svc">
+        <div class="vlan-head">
+          <span class="vlan-name n-svc">SVC</span>
+          <span class="vlan-cidr">VLAN 30 · 10.10.30.0/24</span>
+          <span class="vlan-gw">gw .30.1</span>
+        </div>
+        <div class="svc-list">
+          <span class="svc-tag s-svc">PiHole — DNS global</span>
+          <span class="svc-tag s-svc">NPM proxy interne</span>
+          <span class="svc-tag s-svc">Grafana <span class="badge badge-ro">read-only LAN</span></span>
+        </div>
+        <div class="rules">
+          <div class="rule-line"><span class="permit">permit</span> LAN → SVC:443 (proxy interne)</div>
+          <div class="rule-line"><span class="permit">permit</span> tous VLANs → SVC:53 (PiHole)</div>
+          <div class="rule-line"><span class="permit">permit</span> SVC → FUNLAB ports exposés (proxy → services)</div>
+          <div class="rule-line"><span class="permit">permit</span> SVC → MNGMT:9090 (Grafana → Prometheus)</div>
+          <div class="rule-line"><span class="permit">permit</span> SVC → Internet (MAJ, listes PiHole)</div>
+          <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> SVC → reste MNGMT · LAN · DMZ · CYB · BCKP</div>
+        </div>
+        <div class="xvlan-note">
+          ⚡ Seule règle inter-VLAN SVC↔MNGMT : port 9090 (Prometheus) — sens unique, chirurgical
+        </div>
+      </div>
+
+      <div class="vlan v-dmz">
+        <div class="vlan-head">
+          <span class="vlan-name n-dmz">DMZ</span>
+          <span class="vlan-cidr">VLAN 40 · 10.10.40.0/24</span>
+          <span class="vlan-gw">gw .40.1</span>
+        </div>
+        <div class="svc-list">
+          <span class="svc-tag s-dmz">NPM proxy externe</span>
+          <span class="svc-tag s-dmz">Plex Media Server</span>
+        </div>
+        <div class="rules">
+          <div class="rule-line"><span class="permit">permit</span> Internet → DMZ:443 (NPM uniquement)</div>
+          <div class="rule-line"><span class="permit">permit</span> DMZ → Internet (Plex metadata, MAJ)</div>
+          <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> DMZ → RFC1918 (isolé total)</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Zone utilisateur -->
+    <div class="section-sep">Zone utilisateur &amp; loisirs</div>
+
+    <div class="vlan-grid">
+
+      <div class="vlan v-lan">
+        <div class="vlan-head">
+          <span class="vlan-name n-lan">LAN</span>
+          <span class="vlan-cidr">VLAN 20 · 10.10.20.0/24</span>
+          <span class="vlan-gw">gw .20.1</span>
+        </div>
+        <div class="svc-list">
+          <span class="svc-tag s-lan">PC perso</span>
+          <span class="svc-tag s-lan">WireGuard normal → SVC proxy</span>
+          <span class="svc-tag s-lan">WireGuard admin → MNGMT</span>
+        </div>
+        <div class="rules">
+          <div class="rule-line"><span class="permit">permit</span> LAN → SVC:443 (proxy interne)</div>
+          <div class="rule-line"><span class="permit">permit</span> LAN → SVC:53 (PiHole DNS)</div>
+          <div class="rule-line"><span class="permit">permit</span> LAN → Internet</div>
+          <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> LAN → MNGMT · DMZ · FUNLAB · CYB · BCKP</div>
+        </div>
+      </div>
+
+      <div class="vlan v-fun">
+        <div class="vlan-head">
+          <span class="vlan-name n-fun">FUNLAB</span>
+          <span class="vlan-cidr">VLAN 50 · 10.10.50.0/24</span>
+          <span class="vlan-gw">gw .50.1</span>
+        </div>
+        <div class="svc-list">
+          <span class="svc-tag s-fun">Stack Arr</span>
+          <span class="svc-tag s-fun">qBittorrent</span>
+          <span class="svc-tag s-fun">Bookstack</span>
+          <span class="svc-tag s-fun">Homarr / Homepage</span>
+        </div>
+        <div class="rules">
+          <div class="rule-line"><span class="permit">permit</span> FUNLAB → Internet (torrents, MAJ)</div>
+          <div class="rule-line"><span class="permit">permit</span> FUNLAB → SVC:53 (PiHole DNS)</div>
+          <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> FUNLAB → tous autres VLANs</div>
+        </div>
+      </div>
+
+      <div class="vlan v-cyb">
+        <div class="vlan-head">
+          <span class="vlan-name n-cyb">CYB</span>
+          <span class="vlan-cidr">VLAN 60 · 10.10.60.0/24</span>
+          <span class="vlan-gw">gw .60.1</span>
+        </div>
+        <div class="svc-list">
+          <span class="svc-tag s-cyb">Kali Linux</span>
+          <span class="svc-tag s-cyb">SIEM</span>
+          <span class="svc-tag s-cyb">VMs labo</span>
+        </div>
+        <div class="rules">
+          <div class="rule-line"><span class="permit">permit</span> CYB → Internet uniquement</div>
+          <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> CYB → RFC1918 (isolé total)</div>
+        </div>
+      </div>
+
+      <div class="vlan v-bck">
+        <div class="vlan-head">
+          <span class="vlan-name n-bck">BCKP</span>
+          <span class="vlan-cidr">VLAN 70 · 10.10.70.0/24</span>
+          <span class="vlan-gw">gw .70.1</span>
+        </div>
+        <div class="svc-list">
+          <span class="svc-tag s-bck">VM NAS / PBS</span>
+          <span class="svc-tag s-bck">Sync → NAS externe</span>
+        </div>
+        <div class="rules">
+          <div class="rule-line"><span class="permit">permit</span> BCKP pull → VMs (ports backup) — anti-ransomware</div>
+          <div class="rule-line"><span class="deny">deny&nbsp;&nbsp;</span> VMs push → BCKP</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="arrow-row">↕</div>
+
+  <!-- Nodes externes -->
+  <div class="two-row">
+    <div class="card">
+      <div class="card-label">Réseau local</div>
+      <div class="card-title">PC perso</div>
+      <div class="card-sub">VLAN LAN · Accès services → SVC:443 proxy interne (sans VPN) · WireGuard admin → tout MNGMT · DNS → PiHole SVC</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Stockage externe</div>
+      <div class="card-title">NAS externe</div>
+      <div class="card-sub">Access port VLAN 70 · Destination de sync depuis VM NAS / PBS</div>
+    </div>
+  </div>
+
+  <!-- Légende -->
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>MNGMT — WireGuard admin</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#3b82f6"></div>LAN — usage quotidien</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#10b981"></div>SVC — services réseau + proxy</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#f97316"></div>DMZ — exposition externe</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#84cc16"></div>FUNLAB — loisirs</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>CYB — isolé total</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#8b5cf6"></div>BCKP — pull only</div>
+  </div>
+
+</div>
+</body>
+</html>
