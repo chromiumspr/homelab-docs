@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homelab Network — srv-proxmox-01</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0a0e17;
+    --panel: #0f1623;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #00ff9d;
+    --accent3: #ff6b35;
+    --warn: #ffcc00;
+    --text: #c8d8e8;
+    --muted: #4a6080;
+    --grid: rgba(0,212,255,0.04);
+
+    --vlan10: #00d4ff;
+    --vlan20: #00ff9d;
+    --vlan30: #a78bfa;
+    --vlan40: #ff6b35;
+    --vlan50: #f43f5e;
+    --vlan60: #facc15;
+    --vlan70: #fb923c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    min-height: 100vh;
+    overflow-x: auto;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 20px 32px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(10,14,23,0.9);
+    backdrop-filter: blur(8px);
+  }
+
+  .logo {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--accent);
+    font-size: 13px;
+    text-shadow: 0 0 8px var(--accent);
+    box-shadow: 0 0 12px rgba(0,212,255,0.2);
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: #fff;
+  }
+
+  header p {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    margin-top: 2px;
+  }
+
+  .status-dot {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px;
+    color: var(--accent2);
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .status-dot::before {
+    content: '';
+    width: 7px; height: 7px;
+    background: var(--accent2);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent2);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Main layout */
+  .canvas {
+    position: relative;
+    z-index: 1;
+    padding: 28px 24px 40px;
+    min-width: 960px;
+  }
+
+  /* SVG connector lines */
+  .connections {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* Rows */
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 0;
+    position: relative;
+    z-index: 3;
+  }
+
+  .row-label {
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    min-width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  /* Node card */
+  .node {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-width: 140px;
+    position: relative;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .node:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px rgba(0,212,255,0.15);
+  }
+
+  .node-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .node-title .icon { font-size: 14px; }
+
+  .iface-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .iface {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid transparent;
+    cursor: default;
+    transition: all 0.15s;
+  }
+
+  .iface:hover {
+    background: rgba(0,212,255,0.08);
+    border-color: rgba(0,212,255,0.2);
+  }
+
+  .iface-name {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+
+  .iface-ip {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: var(--text);
+    opacity: 0.7;
+  }
+
+  .iface-badge {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .badge-phys { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+  .badge-bridge { background: rgba(167,139,250,0.15); color: var(--vlan30); border: 1px solid rgba(167,139,250,0.3); }
+  .badge-vlan { background: rgba(0,255,157,0.12); color: var(--accent2); border: 1px solid rgba(0,255,157,0.3); }
+  .badge-tap { background: rgba(255,107,53,0.15); color: var(--accent3); border: 1px solid rgba(255,107,53,0.3); }
+  .badge-vtnet { background: rgba(250,204,21,0.12); color: var(--warn); border: 1px solid rgba(250,204,21,0.3); }
+  .badge-wifi { background: rgba(244,63,94,0.12); color: var(--vlan50); border: 1px solid rgba(244,63,94,0.3); }
+  .badge-lo { background: rgba(74,96,128,0.2); color: var(--muted); border: 1px solid rgba(74,96,128,0.3); }
+  .badge-trunk { background: rgba(251,146,60,0.15); color: var(--vlan70); border: 1px solid rgba(251,146,60,0.3); }
+
+  /* VM node */
+  .node.vm {
+    border-left: 3px solid var(--accent3);
+  }
+
+  .node.proxmox {
+    border-left: 3px solid var(--accent);
+    min-width: 340px;
+  }
+
+  .node.switch {
+    border-left: 3px solid var(--warn);
+  }
+
+  .node.internet {
+    border-left: 3px solid var(--vlan50);
+  }
+
+  .node.client {
+    border-left: 3px solid var(--accent2);
+  }
+
+  /* VLAN legend */
+  .vlan-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 24px;
+  }
+
+  .vlan-tag {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .vlan-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Section separator */
+  .sep {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 20px 0;
+    position: relative;
+    z-index: 3;
+  }
+
+  .sep-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg);
+    padding: 0 12px;
+    font-size: 9px;
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* Flow arrows row */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 8px 0;
+    position: relative;
+    z-index: 3;
+  }
+
+  .arrow {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+  }
+
+  .arrow-line {
+    height: 2px;
+    width: 40px;
+    background: linear-gradient(90deg, transparent, var(--border));
+  }
+
+  /* Note boxes */
+  .note {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    line-height: 1.6;
+  }
+
+  .note-info { background: rgba(0,212,255,0.07); border: 1px solid rgba(0,212,255,0.2); color: #a0c8e0; }
+  .note-warn { background: rgba(255,204,0,0.07); border: 1px solid rgba(255,204,0,0.2); color: #e0c870; }
+  .note-ok { background: rgba(0,255,157,0.06); border: 1px solid rgba(0,255,157,0.2); color: #80e0b0; }
+
+  /* Main topology grid */
+  .topology {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .topo-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 12px 0;
+    position: relative;
+    z-index: 3;
+  }
+
+  .topo-row + .topo-row {
+    border-top: 1px dashed rgba(30,45,69,0.6);
+  }
+
+  /* Connector dots */
+  .node::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 50%;
+    transform: translateX(-50%);
+    width: 4px; height: 4px;
+    background: var(--muted);
+    border-radius: 50%;
+  }
+
+  /* VLAN interfaces block */
+  .vlan-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .vlan-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+  }
+
+  .vlan-card-id {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+
+  .vlan-card-name {
+    font-size: 9px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .vlan-card-subnet {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    color: var(--text);
+    opacity: 0.6;
+  }
+
+  .vlan-card-gw {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    opacity: 0.5;
+    margin-top: 2px;
+  }
+
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    position: relative;
+    z-index: 3;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Wide layout */
+  .wide-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    position: relative;
+    z-index: 3;
+  }
+
+  .full-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    position: relative;
+    z-index: 3;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    position: relative;
+    z-index: 3;
+  }
+
+  .col { display: flex; flex-direction: column; gap: 16px; }
+
+  /* Routing table */
+  .rt {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    position: relative;
+    z-index: 3;
+  }
+
+  .rt table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+  }
+
+  .rt th {
+    text-align: left;
+    color: var(--muted);
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+    letter-spacing: 0.1em;
+  }
+
+  .rt td {
+    padding: 3px 6px;
+    color: var(--text);
+    opacity: 0.8;
+  }
+
+  .rt tr:hover td { background: rgba(0,212,255,0.04); }
+
+  .highlight { color: var(--accent); opacity: 1 !important; }
+  .highlight2 { color: var(--accent2); opacity: 1 !important; }
+  .highlight3 { color: var(--accent3); opacity: 1 !important; }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">PVE</div>
+  <div>
+    <h1>srv-proxmox-01 — Network Diagram</h1>
+    <p>Homelab Infrastructure · dani@srv-proxmox-01 · v2.0</p>
+  </div>
+  <div class="status-dot">MGMT ACTIVE · 10.10.10.10</div>
+</header>
+
+<div class="canvas">
+
+  <!-- VLAN Legend -->
+  <div class="vlan-legend">
+    <span style="font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-right:4px;">VLANs :</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan10)"></span>VLAN10 MGMT</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan20)"></span>VLAN20 LAN</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan30)"></span>VLAN30 SVC</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan40)"></span>VLAN40 DMZ</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan50)"></span>VLAN50 CYB</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan60)"></span>VLAN60 FUNLAB</span>
+    <span class="vlan-tag"><span class="vlan-dot" style="background:var(--vlan70)"></span>VLAN70 BCKP</span>
+  </div>
+
+  <!-- ═══════════════════════ INTERNET / UPLINK ═══════════════════════ -->
+  <div class="section-title">① Uplink / WAN</div>
+
+  <div class="wide-grid" style="grid-template-columns: 1fr 2fr 1fr; margin-bottom:16px;">
+
+    <div class="node internet">
+      <div class="node-title" style="color:var(--vlan50)"><span class="icon">🌐</span> Internet</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">ISP Gateway</span>
+          <span class="iface-ip">172.20.10.1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="node proxmox" style="min-width:unset;">
+      <div class="node-title" style="color:var(--accent)"><span class="icon">📡</span> wlp4s0 — WiFi Uplink (iwlwifi)</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">wlp4s0</span>
+          <span class="iface-ip">172.20.10.10/24</span>
+          <span class="iface-badge badge-wifi">WIFI · PHYS</span>
+        </div>
+        <div class="iface">
+          <span class="iface-name">systemd</span>
+          <span class="iface-ip">wifi-start.service → /usr/local/sbin/wifi-start</span>
+          <span class="iface-badge badge-lo">SVC</span>
+        </div>
+        <div class="iface" style="background:rgba(255,204,0,0.05);border-color:rgba(255,204,0,0.15);">
+          <span class="iface-name" style="color:var(--warn)">NAT MASQ</span>
+          <span class="iface-ip">10.10.0.0/30 + 10.10.0.0/8 → 172.20.10.10</span>
+          <span class="iface-badge badge-bridge">nftables</span>
+        </div>
+        <div class="iface" style="background:rgba(255,204,0,0.05);border-color:rgba(255,204,0,0.15);">
+          <span class="iface-name" style="color:var(--warn)">Policy RT</span>
+          <span class="iface-ip">src 10.10.0.2 → table 100 → via 172.20.10.1</span>
+          <span class="iface-badge badge-bridge">ip rule</span>
+        </div>
+        <div class="note note-warn" style="margin-top:6px;">⚠ Uplink temporaire WiFi → à remplacer par switch Cisco SG350-28 (gi1 trunk) + NIC physique</div>
+      </div>
+    </div>
+
+    <div class="node switch">
+      <div class="node-title" style="color:var(--warn)"><span class="icon">🔀</span> sw-backbone-01</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">Cisco SG350-28</span>
+          <span class="iface-ip">10.10.10.2/24</span>
+          <span class="iface-badge badge-trunk">MGMT IP</span>
+        </div>
+        <div class="iface">
+          <span class="iface-name">gi2 → Proxmox</span>
+          <span class="iface-ip">Trunk tagged VLAN10-70, native VLAN10</span>
+          <span class="iface-badge badge-trunk">TRUNK</span>
+        </div>
+        <div class="iface">
+          <span class="iface-name">gi7 → PC</span>
+          <span class="iface-ip">Untagged VLAN10</span>
+          <span class="iface-badge badge-phys">ACCESS</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════ PROXMOX HOST ═══════════════════════ -->
+  <div class="section-title">② Proxmox Host — srv-proxmox-01 (Interfaces physiques & bridges)</div>
+
+  <div class="two-col" style="margin-bottom:16px;">
+
+    <!-- Physical NICs -->
+    <div class="node proxmox" style="min-width:unset;">
+      <div class="node-title" style="color:var(--accent)"><span class="icon">🖥</span> srv-proxmox-01 — NICs physiques</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">enp2s0 (nic0)</span>
+          <span class="iface-ip">slave de vmbr2 — vers gi2 switch trunk</span>
+          <span class="iface-badge badge-phys">PHYS</span>
+        </div>
+        <div class="iface">
+          <span class="iface-name">wlp4s0</span>
+          <span class="iface-ip">172.20.10.10/24 — WiFi uplink WAN</span>
+          <span class="iface-badge badge-wifi">WIFI</span>
+        </div>
+        <div class="iface" style="opacity:0.5;">
+          <span class="iface-name">NVMe</span>
+          <span class="iface-ip">Micron 2200S 512GB — LVM-Thin (OS + VM/LXC)</span>
+          <span class="iface-badge badge-lo">STOR</span>
+        </div>
+        <div class="iface" style="opacity:0.5;">
+          <span class="iface-name">3× SATA SSD</span>
+          <span class="iface-ip">ZFS RAIDZ1 → zfs-data (~512GB usable, lz4)</span>
+          <span class="iface-badge badge-lo">STOR</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Linux Bridges -->
+    <div class="node proxmox" style="min-width:unset;">
+      <div class="node-title" style="color:var(--accent)"><span class="icon">🌉</span> srv-proxmox-01 — Linux Bridges</div>
+      <div class="iface-list">
+
+        <div class="iface" style="background:rgba(74,96,128,0.1);border-color:var(--border);opacity:0.5;">
+          <span class="iface-name">vmbr0</span>
+          <span class="iface-ip">192.168.10.10/24 · bridge-ports none · INACTIF</span>
+          <span class="iface-badge badge-bridge">BRIDGE</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 6px 2px;font-family:'Share Tech Mono',monospace;">↳ Ancien mgmt via hub (désactivé, gardé en secours)</div>
+
+        <div class="iface" style="margin-top:4px;">
+          <span class="iface-name">vmbr1</span>
+          <span class="iface-ip">10.10.0.1/30 — WAN point-à-point vers pfSense</span>
+          <span class="iface-badge badge-bridge">BRIDGE</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 6px 2px;font-family:'Share Tech Mono',monospace;">↳ Pas de port physique esclave (bridge interne Proxmox)</div>
+
+        <div class="iface" style="margin-top:4px;">
+          <span class="iface-name">vmbr2</span>
+          <span class="iface-ip">Pas d'IP · VLAN-aware trunk bridge</span>
+          <span class="iface-badge badge-bridge">TRUNK BR</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 6px 2px;font-family:'Share Tech Mono',monospace;">↳ bridge-ports enp2s0 · bridge-vlan-aware yes · vers switch gi2</div>
+
+        <div class="iface" style="margin-top:4px;background:rgba(0,212,255,0.06);border-color:rgba(0,212,255,0.2);">
+          <span class="iface-name">vmbr2.10</span>
+          <span class="iface-ip" style="color:var(--vlan10)">10.10.10.10/24 — MGMT Proxmox (persistant)</span>
+          <span class="iface-badge badge-vlan">VLAN 10</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 6px 2px;font-family:'Share Tech Mono',monospace;">↳ défini dans /etc/network/interfaces · accès Proxmox WebUI :8006</div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TAP interfaces (générées par Proxmox pour les VMs) -->
+  <div class="section-title">③ TAP interfaces — générées dynamiquement par Proxmox (VM start/stop)</div>
+
+  <div class="wide-grid" style="margin-bottom:16px;">
+
+    <div class="node">
+      <div class="node-title" style="color:var(--accent3)"><span class="icon">🔌</span> tap100i0</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">tap100i0</span>
+          <span class="iface-ip">VM 100 (pfsense) vtnet0 ↔ vmbr1</span>
+          <span class="iface-badge badge-tap">TAP</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 4px;font-family:'Share Tech Mono',monospace;">hookscript: brctl addif vmbr1 tap100i0</div>
+      </div>
+    </div>
+
+    <div class="node">
+      <div class="node-title" style="color:var(--accent3)"><span class="icon">🔌</span> tap100i1</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">tap100i1</span>
+          <span class="iface-ip">VM 100 (pfsense) vtnet1 ↔ vmbr2</span>
+          <span class="iface-badge badge-tap">TAP</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 4px;font-family:'Share Tech Mono',monospace;">hookscript: brctl addif vmbr2 tap100i1</div>
+      </div>
+    </div>
+
+    <div class="node" style="opacity:0.6;">
+      <div class="node-title" style="color:var(--muted)"><span class="icon">🔌</span> tapXXiY (futurs VMs)</div>
+      <div class="iface-list">
+        <div class="iface">
+          <span class="iface-name">tapXXiY</span>
+          <span class="iface-ip">VLAN LAN/SVC/DMZ/CYB/FUNLAB/BCKP</span>
+          <span class="iface-badge badge-tap">TAP</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 4px;font-family:'Share Tech Mono',monospace;">Rattachés à vmbr2 avec tag VLAN approprié</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- hookscript note -->
+  <div class="note note-info" style="margin-bottom:16px;position:relative;z-index:3;">
+    📜 <strong>hookscript pfSense</strong> : /var/lib/vz/snippets/pfsense-hookscript.pl — exécuté au démarrage/arrêt de VM 100. Ajoute tap100i0 à vmbr1 et tap100i1 à vmbr2 via <code>brctl addif</code>.
+  </div>
+
+  <!-- ═══════════════════════ PFSENSE VM ═══════════════════════ -->
+  <div class="section-title">④ VM 100 — vm-pfsense-01 (Router-on-a-stick)</div>
+
+  <div class="two-col" style="margin-bottom:16px;">
+
+    <div class="node vm">
+      <div class="node-title" style="color:var(--accent3)"><span class="icon">🛡</span> vm-pfsense-01 (ID 100) — Interfaces</div>
+      <div class="iface-list">
+
+        <div class="iface">
+          <span class="iface-name">vtnet0</span>
+          <span class="iface-ip">10.10.0.2/30 — WAN (vmbr1)</span>
+          <span class="iface-badge badge-vtnet">WAN</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 6px 2px;font-family:'Share Tech Mono',monospace;">↳ GW: 10.10.0.1 (Proxmox) → Internet via NAT Proxmox</div>
+
+        <div class="iface" style="margin-top:4px;">
+          <span class="iface-name">vtnet1</span>
+          <span class="iface-ip">Pas d'IP — trunk VLAN (vmbr2)</span>
+          <span class="iface-badge badge-trunk">TRUNK</span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:0 6px 2px;font-family:'Share Tech Mono',monospace;">↳ Porte tous les VLANs 10-70 taggés</div>
+
+        <div class="iface" style="background:rgba(0,212,255,0.06);border-color:rgba(0,212,255,0.2);">
+          <span class="iface-name">vtnet1.10</span>
+          <span class="iface-ip" style="color:var(--vlan10)">10.10.10.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(0,212,255,0.15);color:var(--vlan10)">MGMT</span>
+        </div>
+        <div class="iface" style="background:rgba(0,255,157,0.05);border-color:rgba(0,255,157,0.15);">
+          <span class="iface-name">vtnet1.20</span>
+          <span class="iface-ip" style="color:var(--vlan20)">10.10.20.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(0,255,157,0.12);color:var(--vlan20)">LAN</span>
+        </div>
+        <div class="iface" style="background:rgba(167,139,250,0.05);border-color:rgba(167,139,250,0.15);">
+          <span class="iface-name">vtnet1.30</span>
+          <span class="iface-ip" style="color:var(--vlan30)">10.10.30.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(167,139,250,0.12);color:var(--vlan30)">SVC</span>
+        </div>
+        <div class="iface" style="background:rgba(255,107,53,0.05);border-color:rgba(255,107,53,0.15);">
+          <span class="iface-name">vtnet1.40</span>
+          <span class="iface-ip" style="color:var(--vlan40)">10.10.40.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(255,107,53,0.12);color:var(--vlan40)">DMZ</span>
+        </div>
+        <div class="iface" style="background:rgba(244,63,94,0.05);border-color:rgba(244,63,94,0.15);">
+          <span class="iface-name">vtnet1.50</span>
+          <span class="iface-ip" style="color:var(--vlan50)">10.10.50.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(244,63,94,0.12);color:var(--vlan50)">CYB</span>
+        </div>
+        <div class="iface" style="background:rgba(250,204,21,0.05);border-color:rgba(250,204,21,0.15);">
+          <span class="iface-name">vtnet1.60</span>
+          <span class="iface-ip" style="color:var(--vlan60)">10.10.60.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(250,204,21,0.12);color:var(--vlan60)">FUNLAB</span>
+        </div>
+        <div class="iface" style="background:rgba(251,146,60,0.05);border-color:rgba(251,146,60,0.15);">
+          <span class="iface-name">vtnet1.70</span>
+          <span class="iface-ip" style="color:var(--vlan70)">10.10.70.1/24</span>
+          <span class="iface-badge badge-vlan" style="background:rgba(251,146,60,0.12);color:var(--vlan70)">BCKP</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- pfSense DHCP + Firewall summary -->
+    <div class="col">
+      <div class="node vm">
+        <div class="node-title" style="color:var(--accent3)"><span class="icon">📋</span> pfSense — DHCP par VLAN</div>
+        <div class="iface-list">
+          <div class="iface"><span class="iface-name" style="color:var(--vlan10)">VLAN10 MGMT</span><span class="iface-ip">10.10.10.100 – .200</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan20)">VLAN20 LAN</span><span class="iface-ip">10.10.20.100 – .200</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan30)">VLAN30 SVC</span><span class="iface-ip">10.10.30.100 – .200</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan40)">VLAN40 DMZ</span><span class="iface-ip">10.10.40.100 – .200</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan50)">VLAN50 CYB</span><span class="iface-ip">10.10.50.100 – .200</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan60)">VLAN60 FUNLAB</span><span class="iface-ip">10.10.60.100 – .200</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan70)">VLAN70 BCKP</span><span class="iface-ip">10.10.70.100 – .200</span></div>
+        </div>
+      </div>
+      <div class="node vm">
+        <div class="node-title" style="color:var(--accent3)"><span class="icon">🔒</span> pfSense — Firewall (résumé)</div>
+        <div class="iface-list">
+          <div class="iface"><span class="iface-name" style="color:var(--vlan50)">WAN</span><span class="iface-ip">Block 443/8006/RFC1918 · Pass WireGuard :51820</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan10)">MGMT</span><span class="iface-ip">Pass PVE:8006 · pfS:443 · SSH · DNS</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan20)">LAN</span><span class="iface-ip">Deny MGMT/DMZ/CYB · Pass DNS(SVC)+NPM:443</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan30)">SVC</span><span class="iface-ip">Deny tous VLANs inter · Pass DNS+Internet</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan40)">DMZ</span><span class="iface-ip">Deny RFC1918 · Pass Internet · Plex :32400</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan50)">CYB</span><span class="iface-ip">Deny ALL_VLANs · Internet only</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan60)">FUNLAB</span><span class="iface-ip">Deny MGMT/CYB/BCKP · Pass NPM:443+qBit:6881</span></div>
+          <div class="iface"><span class="iface-name" style="color:var(--vlan70)">BCKP</span><span class="iface-ip">Pass ALL_VLANs:8007+DNS · No Internet</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════ SERVICES PAR VLAN ═══════════════════════ -->
+  <div class="section-title">⑤ Services déployés / prévus par VLAN</div>
+
+  <div class="vlan-grid" style="margin-bottom:20px;">
+
+    <div class="vlan-card" style="border-color:rgba(0,212,255,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan10)">VLAN 10</div>
+      <div class="vlan-card-name">MGMT</div>
+      <div class="vlan-card-subnet">10.10.10.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">Portainer<br>WireGuard<br>Proxmox :8006<br>pfSense :443<br>sw-backbone-01</div>
+    </div>
+
+    <div class="vlan-card" style="border-color:rgba(0,255,157,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan20)">VLAN 20</div>
+      <div class="vlan-card-name">LAN</div>
+      <div class="vlan-card-subnet">10.10.20.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">Clients locaux<br>Accès SVC:443<br>PiHole DNS</div>
+    </div>
+
+    <div class="vlan-card" style="border-color:rgba(167,139,250,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan30)">VLAN 30</div>
+      <div class="vlan-card-name">SVC</div>
+      <div class="vlan-card-subnet">10.10.30.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">NPM (reverse proxy)<br>PiHole DNS<br>Isolé inter-VLAN</div>
+    </div>
+
+    <div class="vlan-card" style="border-color:rgba(255,107,53,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan40)">VLAN 40</div>
+      <div class="vlan-card-name">DMZ</div>
+      <div class="vlan-card-subnet">10.10.40.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">NPM (externe)<br>Plex :32400<br>Deny RFC1918</div>
+    </div>
+
+    <div class="vlan-card" style="border-color:rgba(244,63,94,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan50)">VLAN 50</div>
+      <div class="vlan-card-name">CYB</div>
+      <div class="vlan-card-subnet">10.10.50.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">Pentest / CTF<br>Internet only<br>Deny ALL VLANs</div>
+    </div>
+
+    <div class="vlan-card" style="border-color:rgba(250,204,21,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan60)">VLAN 60</div>
+      <div class="vlan-card-name">FUNLAB</div>
+      <div class="vlan-card-subnet">10.10.60.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">*arr stack<br>qBittorrent<br>Homarr<br>Gluetun VPN (prévu)</div>
+    </div>
+
+    <div class="vlan-card" style="border-color:rgba(251,146,60,0.3);">
+      <div class="vlan-card-id" style="color:var(--vlan70)">VLAN 70</div>
+      <div class="vlan-card-name">BCKP</div>
+      <div class="vlan-card-subnet">10.10.70.0/24</div>
+      <div style="font-size:8px;color:var(--text);opacity:0.5;margin-top:4px;line-height:1.5;">PBS (Proxmox BS)<br>NAS<br>Pull-only<br>SSH depuis MGMT</div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════ ROUTING TABLE ═══════════════════════ -->
+  <div class="section-title">⑥ Tables de routage Proxmox (simplifié)</div>
+
+  <div class="two-col" style="margin-bottom:20px;">
+    <div class="rt">
+      <div style="font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:6px;">Table MAIN</div>
+      <table>
+        <tr><th>Destination</th><th>Via</th><th>Interface</th></tr>
+        <tr><td class="highlight">10.10.0.0/30</td><td>—</td><td>vmbr1</td></tr>
+        <tr><td class="highlight2">10.10.10.0/24</td><td>—</td><td>vmbr2.10</td></tr>
+        <tr><td>172.20.10.0/24</td><td>—</td><td>wlp4s0</td></tr>
+        <tr><td>0.0.0.0/0</td><td>172.20.10.1</td><td>wlp4s0</td></tr>
+      </table>
+    </div>
+    <div class="rt">
+      <div style="font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:6px;">Table 100 (policy routing pfSense WAN)</div>
+      <table>
+        <tr><th>Règle</th><th>Condition</th><th>Action</th></tr>
+        <tr><td class="highlight3">ip rule</td><td>src 10.10.0.2</td><td>→ table 100</td></tr>
+        <tr><td class="highlight3">table 100</td><td>default</td><td>via 172.20.10.1 dev wlp4s0</td></tr>
+        <tr><td class="highlight">FORWARD</td><td>vmbr1 ↔ wlp4s0</td><td>ACCEPT (nftables)</td></tr>
+        <tr><td class="highlight">MASQ</td><td>10.10.0.0/8 → wlp4s0</td><td>NAT out</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════ CLIENT + TODO ═══════════════════════ -->
+  <div class="section-title">⑦ Client & TODO</div>
+  <div class="two-col">
+    <div class="node client">
+      <div class="node-title" style="color:var(--accent2)"><span class="icon">💻</span> PC (gi7 · VLAN10 untagged)</div>
+      <div class="iface-list">
+        <div class="iface"><span class="iface-name">eth0</span><span class="iface-ip">DHCP → 10.10.10.x/24</span><span class="iface-badge badge-vlan">VLAN10</span></div>
+        <div class="iface"><span class="iface-name">WebUI PVE</span><span class="iface-ip">https://10.10.10.10:8006</span></div>
+        <div class="iface"><span class="iface-name">pfSense</span><span class="iface-ip">https://10.10.10.1</span></div>
+        <div class="iface"><span class="iface-name">sw-backbone</span><span class="iface-ip">https://10.10.10.2</span></div>
+      </div>
+    </div>
+    <div class="note note-warn" style="height:fit-content;">
+      📌 <strong>TODO list</strong><br><br>
+      1. Configurer règles firewall inter-VLAN pfSense<br>
+      2. Tester DHCP end-to-end par VLAN<br>
+      3. Migrer mgmt Proxmox → VLAN10 (done ✓)<br>
+      4. Rendre routes Windows persistantes<br>
+      5. Remplacer WiFi wlp4s0 par câble RJ45 via SG350-28 (gi1 trunk uplink)
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
