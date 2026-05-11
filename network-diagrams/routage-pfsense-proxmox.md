@@ -1,4 +1,4 @@
-# Résumé complet — Interfaces, routes et règles
+# Routage complet : Interfaces, routes et règles
 
 ## Inventaire des machines
 
