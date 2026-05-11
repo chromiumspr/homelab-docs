@@ -1,10 +1,6 @@
-# Migration Proxmox → Switch Manageable SG350
+# Switch Manageable SG350
 
 **Date :** 27/04/2026  
-**Auteur :** dani  
-**Statut :** ✅ Terminé
-
----
 
 ## Objectif
 
@@ -228,9 +224,3 @@ route add 10.0.0.0 mask 255.0.0.0 192.168.10.10 if 13 -p
 
 ---
 
-## TODO restant
-
-- [ ] Tester DHCP par VLAN (20 à 70)
-- [ ] Supprimer `vmbr0` définitivement une fois VLAN MGMT validé stable
-- [ ] Mettre à jour la route Windows vers `10.10.10.10` quand `vmbr0` supprimé
-- [ ] Déployer les services par VLAN (NPM, PiHole, Portainer, etc.)
