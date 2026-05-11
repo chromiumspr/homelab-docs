@@ -9,11 +9,11 @@
 
 | Machine | Rôle |
 |---------|------|
-| srv-proxmox-01 | Hyperviseur Proxmox, routeur NAT temporaire |
-| vm-pfsense-01 | Routeur/Firewall pfSense (VM ID 100) |
-| sw-backbone-01 | Switch manageable Cisco SG350-28 (`10.10.10.2/24`) |
+| srv-proxmox-01 | Hyperviseur Proxmox, routeur NAT temporaire (vmbr1/vtnet0) |
+| vm-pfsense-01 | Routeur/Firewall pfSense  |
+| sw-backbone-01 | Switch  Cisco SG350-28 (`10.10.10.2/24`) |
 | PC Admin | Poste d'administration (`10.10.10.7/24`) |
-| Téléphone | Partage de connexion WiFi (internet temporaire) |
+| Téléphone | Partage de connexion WiFi (internet tmp) |
 
 ---
 
@@ -25,15 +25,15 @@
 |-----------|------|----|------------|------|
 | nic0 | physique | — | sw-backbone-01 gi2 | Esclave de vmbr2 (trunk VLAN-aware) |
 | wlp4s0 | WiFi | 172.20.10.10/28 (DHCP) | Téléphone | Internet temporaire |
-| vmbr0 | bridge (`bridge-ports none`) | 192.168.10.10/24 | — | Inactif — fallback uniquement |
+| vmbr0 | bridge (`bridge-ports none`) | 192.168.10.10/24 | — | Inactif — just in case |
 | vmbr1 | bridge virtuel point-à-point | 10.10.0.1/30 | vtnet0 pfSense | Lien WAN |
 | vmbr2 | bridge virtuel VLAN-aware | `inet manual` (pas d'IP) | nic0 → switch gi2 | Trunk multi-VLAN |
 | vmbr2.10 | sous-interface VLAN 10 | 10.10.10.10/24 | — | Accès management Proxmox |
 | tap100i0 | tap VM | — | vmbr1 | Interface WAN VM pfSense |
 | tap100i1 | tap VM | — | vmbr2 | Interface LAN/trunk VM pfSense |
 
-> ⚠️ `vmbr2` doit rester `inet manual` (sans IP directe). L'accès management Proxmox passe **uniquement** par `vmbr2.10`.  
-> ⚠️ `vmbr0` est conservé en structure mais inactif (`bridge-ports none`). Ne pas y remettre de gateway.
+> ⚠️ `vmbr2` doit rester `inet manual` (pas d'IP). L'accès management Proxmox passe **uniquement** par `vmbr2.10`.  
+> ⚠️ `vmbr0` est conservé en structure mais inactif (`bridge-ports none`). 
 
 ### vm-pfsense-01
 
@@ -236,21 +236,7 @@ VM (10.10.x.x)
 
 ---
 
-## Persistance des règles
-
-| Règle | Persistant via | Survie au reboot |
-|-------|---------------|-----------------|
-| ip rule from 10.10.0.2 table 100 | `/usr/local/sbin/wifi-start` (systemd service) | ✅ |
-| ip route table 100 default | `/usr/local/sbin/wifi-start` | ✅ |
-| iptables NAT MASQUERADE | `post-up` vmbr1 dans `/etc/network/interfaces` | ✅ |
-| iptables FORWARD | `/usr/local/sbin/wifi-start` | ✅ |
-| ip_forward sysctl | `post-up` vmbr1 dans `/etc/network/interfaces` | ✅ |
-| vmbr2.10 (10.10.10.10/24) | `/etc/network/interfaces` | ✅ |
-| default route via wlp4s0 | `post-up` wlp4s0 dans `/etc/network/interfaces` | ✅ |
-
----
-
-## Ce qui est temporaire (uplink WiFi)
+## Uplink WiFi
 
 L'ensemble du chemin internet repose sur `wlp4s0` (partage WiFi téléphone). Cette configuration sera remplacée par :
 
