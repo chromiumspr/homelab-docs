@@ -118,8 +118,6 @@ DHCP activé par VLAN dans pfSense (plage `.100–.200`).
 ## Tables de routage
 
 > **Lire :** "Tout ce qui vient de source vers destination sort par interface vers via"   
-> **Mise à jour :** Architecture "Philosophie B" avec switch manageable Cisco SG350-28  
-> **Remplace :** Version antérieure basée sur hub + `vmbr0` actif + LAN flat
 
 ### Proxmox — table main
 
