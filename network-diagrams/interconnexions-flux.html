@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homelab v4.0 — Flux réseau</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0e14;
+    --bg2:       #0f1520;
+    --bg3:       #151d2e;
+    --border:    #1e2d45;
+    --accent:    #00d4ff;
+    --accent2:   #ff6b35;
+    --accent3:   #7fff6b;
+    --accent4:   #ffdd57;
+    --muted:     #4a6080;
+    --text:      #c8daf0;
+    --text-dim:  #6a8aaa;
+    --internet:  #ff6b35;
+    --proxmox:   #00d4ff;
+    --pfsense:   #7fff6b;
+    --switch:    #ffdd57;
+    --vlan:      #b388ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    margin-bottom: 48px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 28px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  header span {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border: 1px solid;
+    border-radius: 3px;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .badge-temp { border-color: var(--accent2); color: var(--accent2); }
+  .badge-ok   { border-color: var(--accent3); color: var(--accent3); }
+  .badge-off  { border-color: var(--muted);   color: var(--muted); }
+
+  /* Layout grille */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .full-width { grid-column: 1 / -1; }
+
+  /* Cards */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-internet { background: var(--internet); box-shadow: 0 0 6px var(--internet); }
+  .dot-proxmox  { background: var(--proxmox);  box-shadow: 0 0 6px var(--proxmox); }
+  .dot-pfsense  { background: var(--pfsense);  box-shadow: 0 0 6px var(--pfsense); }
+  .dot-switch   { background: var(--switch);   box-shadow: 0 0 6px var(--switch); }
+  .dot-vlan     { background: var(--vlan);     box-shadow: 0 0 6px var(--vlan); }
+  .dot-multi    { background: linear-gradient(135deg, var(--proxmox), var(--pfsense)); }
+
+  .card-body { padding: 20px; }
+
+  /* Flux diagram */
+  .flux {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .flux-node {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg3);
+    min-width: 280px;
+    transition: border-color 0.2s;
+  }
+
+  .flux-node:hover { border-color: var(--accent); }
+
+  .flux-node .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .flux-node .ip {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .flux-arrow {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding-left: 23px;
+    margin: 0;
+  }
+
+  .flux-arrow-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .flux-line {
+    width: 2px;
+    height: 12px;
+    background: var(--border);
+    position: relative;
+  }
+
+  .flux-line.animated {
+    background: linear-gradient(to bottom, var(--accent), transparent);
+    animation: flowDown 1.2s linear infinite;
+  }
+
+  .flux-line.animated-up {
+    background: linear-gradient(to top, var(--accent), transparent);
+    animation: flowUp 1.2s linear infinite;
+  }
+
+  @keyframes flowDown {
+    0%   { opacity: 0.3; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+
+  @keyframes flowUp {
+    0%   { opacity: 0.3; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+
+  .flux-tip {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid var(--border);
+  }
+
+  .flux-tip.up {
+    border-top: none;
+    border-bottom: 7px solid var(--accent);
+  }
+
+  .flux-tip.down {
+    border-top: 7px solid var(--accent);
+    border-bottom: none;
+  }
+
+  .flux-annotation {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 2px 8px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    align-self: center;
+    margin-left: 8px;
+  }
+
+  .flux-annotation.accent  { color: var(--accent); }
+  .flux-annotation.accent2 { color: var(--accent2); }
+  .flux-annotation.accent3 { color: var(--accent3); }
+  .flux-annotation.accent4 { color: var(--accent4); }
+
+  /* Color by device */
+  .node-internet .label { color: var(--internet); }
+  .node-proxmox  .label { color: var(--proxmox); }
+  .node-pfsense  .label { color: var(--pfsense); }
+  .node-switch   .label { color: var(--switch); }
+  .node-pc       .label { color: var(--accent4); }
+  .node-vlan     .label { color: var(--vlan); }
+  .node-inactive .label { color: var(--muted); text-decoration: line-through; }
+
+  /* Interconnexion diagram */
+  .interconnect {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 8px 0;
+  }
+
+  .ic-node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg3);
+    width: 100%;
+    max-width: 600px;
+    cursor: default;
+    transition: all 0.2s;
+  }
+
+  .ic-node:hover {
+    border-color: currentColor;
+    transform: translateX(2px);
+  }
+
+  .ic-node .name {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ic-node .detail {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+    line-height: 1.5;
+  }
+
+  .ic-connector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    width: 100%;
+    max-width: 600px;
+    justify-content: center;
+  }
+
+  .ic-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    max-width: 80px;
+  }
+
+  .ic-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .ic-vbar {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    align-self: center;
+  }
+
+  /* Branch */
+  .ic-branch {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    width: 100%;
+    max-width: 600px;
+    justify-content: center;
+    padding: 0 60px;
+  }
+
+  .ic-branch-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    flex: 1;
+  }
+
+  .ic-branch-line {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: 10px 20px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    margin-bottom: -1px;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Section titles */
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    padding-left: 4px;
+    border-left: 2px solid var(--accent);
+    padding-left: 8px;
+  }
+
+  .flux-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  .flux-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+  }
+
+  .flux-card-title {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flux-card-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Animated packet */
+  .packet {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  .row-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* arrow between nodes inline */
+  .arrow-right {
+    color: var(--accent);
+    font-size: 14px;
+  }
+
+  /* Step-based flux */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .step {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .step-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 32px;
+    flex-shrink: 0;
+  }
+
+  .step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+
+  .step-vline {
+    width: 1px;
+    flex: 1;
+    background: var(--border);
+    min-height: 12px;
+  }
+
+  .step-body {
+    padding: 2px 0 14px;
+    flex: 1;
+  }
+
+  .step-node {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg2);
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .step-note {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding-left: 4px;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>srv-proxmox-01</h1>
+    <span>Homelab v4.0 — Flux réseau &amp; interconnexions</span>
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+      <span class="badge badge-temp">WiFi temporaire</span>
+      <span class="badge badge-ok">Switch SG350</span>
+    </div>
+  </header>
+
+  <div style="margin-bottom:32px;">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('interconnexions')">Interconnexions</button>
+      <button class="tab" onclick="switchTab('flux')">Flux de trafic</button>
+    </div>
+
+    <!-- TAB: INTERCONNEXIONS -->
+    <div id="tab-interconnexions" class="tab-content active">
+      <div class="card">
+        <div class="card-header">
+          <div class="dot dot-multi"></div>
+          <span class="card-title">Architecture globale — vue verticale</span>
+          <div style="margin-left:auto;"><span class="badge badge-temp">uplink WiFi actif</span></div>
+        </div>
+        <div class="card-body">
+          <div class="interconnect">
+
+            <!-- Internet -->
+            <div class="ic-node" style="color:var(--internet); border-color:var(--internet)33;">
+              <span class="name">🌐 INTERNET</span>
+              <span class="detail"></span>
+            </div>
+            <div class="ic-connector">
+              <div class="ic-vbar" style="background:var(--internet)44;"></div>
+              <span class="ic-label" style="color:var(--internet);">WiFi 802.11 (temporaire)</span>
+              <div class="ic-vbar" style="background:var(--internet)44;"></div>
+            </div>
+
+            <!-- Téléphone -->
+            <div class="ic-node" style="color:var(--internet); border-color:var(--internet)33;">
+              <span class="name">📱 Téléphone</span>
+              <span class="detail">172.20.10.1 — gateway WiFi</span>
+            </div>
+            <div class="ic-connector">
+              <div class="ic-vbar" style="background:var(--proxmox)44;"></div>
+              <span class="ic-label" style="color:var(--proxmox);">wlp4s0 172.20.10.10/28 — NAT MASQUERADE</span>
+              <div class="ic-vbar" style="background:var(--proxmox)44;"></div>
+            </div>
+
+            <!-- Proxmox -->
+            <div class="ic-node" style="color:var(--proxmox); border-color:var(--proxmox)33;">
+              <span class="name">⚙️ srv-proxmox-01</span>
+              <span class="detail">vmbr1 10.10.0.1/30 · vmbr2 (trunk) · vmbr2.10 10.10.10.10/24<br>ip rule table 100 · iptables FORWARD</span>
+            </div>
+            <div class="ic-connector">
+              <div class="ic-vbar" style="background:var(--pfsense)44;"></div>
+              <span class="ic-label" style="color:var(--pfsense);">vmbr1 ↔ vtnet0 — lien WAN /30 point-à-point</span>
+              <div class="ic-vbar" style="background:var(--pfsense)44;"></div>
+            </div>
+
+            <!-- pfSense -->
+            <div class="ic-node" style="color:var(--pfsense); border-color:var(--pfsense)33;">
+              <span class="name">🔥 vm-pfsense-01</span>
+              <span class="detail">vtnet0 WAN 10.10.0.2/30 · vtnet1 trunk (no IP)<br>vtnet1.10→.70 — router-on-a-stick</span>
+            </div>
+            <div class="ic-connector">
+              <div class="ic-vbar" style="background:var(--switch)44;"></div>
+              <span class="ic-label" style="color:var(--switch);">vmbr2 ↔ vtnet1 — trunk 802.1Q VLANs 10-70</span>
+              <div class="ic-vbar" style="background:var(--switch)44;"></div>
+            </div>
+
+            <!-- Switch -->
+            <div class="ic-node" style="color:var(--switch); border-color:var(--switch)33;">
+              <span class="name">🔀 sw-backbone-01</span>
+              <span class="detail">Cisco SG350-28 · 10.10.10.2/24<br>gi2: trunk VLANs 10-70 (PVID 10) · gi7: access VLAN10</span>
+            </div>
+
+            <!-- Branch PC -->
+            <div class="ic-branch" style="margin-top:0;">
+              <div class="ic-branch-item">
+                <div class="ic-branch-line"></div>
+                <div class="ic-node" style="color:var(--accent4); border-color:var(--accent4)33; max-width:100%;">
+                  <span class="name">💻 PC Admin</span>
+                  <span class="detail">10.10.10.7/24<br>VLAN10 untagged</span>
+                </div>
+              </div>
+              <div class="ic-branch-item">
+                <div class="ic-branch-line"></div>
+                <div class="ic-node" style="color:var(--vlan); border-color:var(--vlan)33; max-width:100%;">
+                  <span class="name">🏷️ VLANs 20–70</span>
+                  <span class="detail">LAN / SVC / DMZ<br>CYB / FUNLAB / BCKP</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Note inactive -->
+            <div style="margin-top:20px; padding:12px 16px; border:1px dashed var(--muted); border-radius:6px; font-size:11px; color:var(--muted); width:100%; max-width:600px; text-align:center;">
+              <span class="badge badge-off" style="margin-right:8px;">INACTIF</span>
+              vmbr0 192.168.10.10/24 — bridge-ports none — hub débranché
+            </div>
+
+          </div>
+        </div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--internet);"></div>Internet / Téléphone</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--proxmox);"></div>Proxmox host</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--pfsense);"></div>pfSense VM</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--switch);"></div>Switch SG350</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent4);"></div>PC Admin</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--vlan);"></div>VLANs</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: FLUX -->
+    <div id="tab-flux" class="tab-content">
+      <div class="flux-group">
+
+        <!-- Flux 1: pfSense → Internet -->
+        <div class="flux-card">
+          <div class="flux-card-title" style="color:var(--internet);">
+            <span class="packet" style="background:var(--internet);box-shadow:0 0 6px var(--internet);"></span>
+            pfSense → Internet
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--pfsense);color:var(--pfsense);">1</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--pfsense)33;color:var(--pfsense);">🔥 vtnet0 pfSense</div>
+                <div class="step-note">src = 10.10.0.2</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">2</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">⚙️ vmbr1 Proxmox</div>
+                <div class="step-note" style="color:var(--accent);">ip rule : from 10.10.0.2 → table 100</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">3</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">⚙️ wlp4s0 172.20.10.10</div>
+                <div class="step-note" style="color:var(--accent2);">NAT MASQUERADE — src → 172.20.10.10</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--internet);color:var(--internet);">4</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--internet)33;color:var(--internet);">📱 Téléphone 172.20.10.1</div>
+                <div class="step-note">gateway WiFi</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--internet);color:var(--internet);">5</div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--internet)33;color:var(--internet);">🌐 Internet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flux 2: PC Admin → Proxmox UI -->
+        <div class="flux-card">
+          <div class="flux-card-title" style="color:var(--proxmox);">
+            <span class="packet" style="background:var(--proxmox);box-shadow:0 0 6px var(--proxmox);"></span>
+            PC Admin → Proxmox UI
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--accent4);color:var(--accent4);">1</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--accent4)33;color:var(--accent4);">💻 PC Admin 10.10.10.7</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--switch);color:var(--switch);">2</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--switch)33;color:var(--switch);">🔀 gi7 → gi2 SG350</div>
+                <div class="step-note" style="color:var(--switch);">VLAN10 untagged → trunk tagué</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">3</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">⚙️ nic0 → vmbr2 → vmbr2.10</div>
+                <div class="step-note">10.10.10.10/24 — Proxmox</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">4</div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">🖥️ https://10.10.10.10:8006</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flux 3: PC Admin → pfSense UI -->
+        <div class="flux-card">
+          <div class="flux-card-title" style="color:var(--pfsense);">
+            <span class="packet" style="background:var(--pfsense);box-shadow:0 0 6px var(--pfsense);"></span>
+            PC Admin → pfSense UI
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--accent4);color:var(--accent4);">1</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--accent4)33;color:var(--accent4);">💻 PC Admin 10.10.10.7</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--switch);color:var(--switch);">2</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--switch)33;color:var(--switch);">🔀 gi7 → gi2 SG350</div>
+                <div class="step-note" style="color:var(--switch);">VLAN10 untagged → trunk tagué</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">3</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">⚙️ nic0 → vmbr2</div>
+                <div class="step-note">bridge VLAN-aware → pfSense</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--pfsense);color:var(--pfsense);">4</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--pfsense)33;color:var(--pfsense);">🔥 vtnet1.10 10.10.10.1</div>
+                <div class="step-note">VLAN10 MGMT — pfSense</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--pfsense);color:var(--pfsense);">5</div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--pfsense)33;color:var(--pfsense);">🖥️ https://10.10.10.1</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flux 4: VM lab → Internet -->
+        <div class="flux-card">
+          <div class="flux-card-title" style="color:var(--vlan);">
+            <span class="packet" style="background:var(--vlan);box-shadow:0 0 6px var(--vlan);"></span>
+            VM lab → Internet
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--vlan);color:var(--vlan);">1</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--vlan)33;color:var(--vlan);">📦 VM 10.10.x.x</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--pfsense);color:var(--pfsense);">2</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--pfsense)33;color:var(--pfsense);">🔥 vtnet1.x pfSense</div>
+                <div class="step-note" style="color:var(--pfsense);">gateway VLAN → routing + NAT pfSense</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--pfsense);color:var(--pfsense);">3</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--pfsense)33;color:var(--pfsense);">🔥 vtnet0 WAN 10.10.0.2</div>
+                <div class="step-note">sortie WAN pfSense</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">4</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">⚙️ vmbr1 Proxmox</div>
+                <div class="step-note" style="color:var(--accent);">ip rule : from 10.10.0.2 → table 100</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--proxmox);color:var(--proxmox);">5</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--proxmox)33;color:var(--proxmox);">⚙️ wlp4s0 172.20.10.10</div>
+                <div class="step-note" style="color:var(--accent2);">NAT MASQUERADE — src → 172.20.10.10</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--internet);color:var(--internet);">6</div><div class="step-vline"></div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--internet)33;color:var(--internet);">📱 Téléphone 172.20.10.1</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-left"><div class="step-num" style="border-color:var(--internet);color:var(--internet);">7</div></div>
+              <div class="step-body">
+                <div class="step-node" style="border-color:var(--internet)33;color:var(--internet);">🌐 Internet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer style="margin-top:40px; padding-top:20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); letter-spacing:1px;">
+    <span>srv-proxmox-01 · Architecture v4.0 — Philosophie B</span>
+    <span>uplink WiFi temporaire · switch SG350-28 actif</span>
+  </footer>
+
+</div>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+  }
+</script>
+</body>
+</html>
