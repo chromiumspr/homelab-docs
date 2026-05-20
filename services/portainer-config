@@ -1,0 +1,208 @@
+# Portainer — Déploiement & Gestion
+
+## Sommaire
+
+1. [Infrastructure](#1-infrastructure)
+2. [Déploiement Portainer](#2-déploiement-portainer)
+3. [Configuration initiale Portainer](#3-configuration-initiale-portainer)
+4. [Déploiement de l'agent](#4-déploiement-de-lagent)
+5. [Configuration de l'agent dans Portainer](#5-configuration-de-lagent-dans-portainer)
+6. [Accès](#6-accès)
+7. [Ajouter un nouvel environnement Docker](#7-ajouter-un-nouvel-environnement-docker)
+8. [Ajouter un nouveau conteneur](#8-ajouter-un-nouveau-conteneur)
+
+---
+
+## 1. Infrastructure
+
+| Composant | VM | VLAN | IP | Port |
+|---|---|---|---|---|
+| Portainer (serveur) | `vm-docker-02` | MGMT | `10.10.10.20` | `9000` |
+| Portainer Agent | `vm-svc-01` | SVC | `10.10.30.10` | `9001` |
+
+**Environnements enregistrés :**
+
+| Nom | Type | URL |
+|---|---|---|
+| `vm-docker-02` (local) | Docker Standalone | socket local |
+| `vm-svc-01` | Agent | `10.10.30.10:9001` |
+
+---
+
+## 2. Déploiement Portainer
+
+Sur `vm-docker-02` :
+
+```bash
+mkdir -p /opt/docker/portainer
+nano /opt/docker/portainer/docker-compose.yml
+```
+
+Contenu :
+
+```yaml
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+volumes:
+  portainer_data:
+```
+
+```bash
+cd /opt/docker/portainer
+docker compose up -d
+```
+
+Vérifier que le conteneur tourne :
+
+```bash
+docker ps
+```
+
+---
+
+## 3. Configuration initiale Portainer
+
+Au premier accès sur `http://10.10.10.20:9000` :
+
+1. **Créer le compte admin** : saisir un nom d'utilisateur et un mot de passe fort
+2. **Choisir l'environnement local** : sélectionner **Docker Standalone** → **Connect**
+
+> ⚠️ Portainer expire la fenêtre de création du compte admin après quelques minutes. Si le délai est dépassé, redémarrer le conteneur : `docker restart portainer`
+
+Portainer affiche alors le dashboard de l'environnement local (`vm-docker-02`).
+
+---
+
+## 4. Déploiement de l'agent
+
+L'agent Portainer est un conteneur léger qui expose le socket Docker d'une VM distante sur le port `9001`. Il permet à Portainer de gérer les conteneurs de cette VM à distance.
+
+Sur la VM cible (ici `vm-svc-01`) :
+
+```bash
+mkdir -p /opt/docker/portainer-agent
+nano /opt/docker/portainer-agent/docker-compose.yml
+```
+
+Contenu :
+
+```yaml
+services:
+  portainer_agent:
+    image: portainer/agent:latest
+    container_name: portainer-agent
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+```
+
+```bash
+cd /opt/docker/portainer-agent
+docker compose up -d
+```
+
+Vérifier que l'agent tourne :
+
+```bash
+docker ps
+docker logs portainer-agent
+```
+
+> ⚠️ La version de l'agent doit correspondre à celle du serveur Portainer. Utiliser `portainer/agent:latest` et `portainer/portainer-ce:latest` ensemble garantit la compatibilité.
+
+### Règle firewall requise
+
+Portainer (MGMT) initie la connexion vers l'agent (VLAN cible) — ajouter sur **VLAN10MGMT** :
+
+| Source | Destination | Port | Description |
+|---|---|---|---|
+| `NET_MGMT` | IP de la VM cible | `9001` | alw portainer → agent |
+
+---
+
+## 5. Configuration de l'agent dans Portainer
+
+Une fois l'agent déployé et la règle firewall en place :
+
+**Settings → Environments → Add environment → Agent**
+
+| Champ | Valeur |
+|---|---|
+| **Environment type** | Agent |
+| **Name** | `vm-svc-01` (ou nom de la VM) |
+| **Environment URL** | `10.10.30.10:9001` |
+
+Cliquer sur **Connect**. Portainer affiche alors l'environnement distant dans la liste.
+
+> ℹ️ Ne pas utiliser **Edge Agent** — ce mode est conçu pour des environnements distants où Portainer ne peut pas initier la connexion. Dans notre architecture, Portainer peut toujours joindre l'agent via les règles firewall MGMT.
+
+---
+
+## 6. Accès
+
+| Mode | URL | Depuis |
+|---|---|---|
+| Direct | `http://10.10.10.20:9000` | VLAN MGMT uniquement |
+| Via proxy | `http://portainer.home.lab` | LAN (via NPM `vm-svc-01`) |
+
+**Configuration NPM pour `portainer.home.lab` :**
+
+| Champ | Valeur |
+|---|---|
+| Scheme | `http` |
+| Forward Hostname | `10.10.10.20` |
+| Forward Port | `9000` |
+| Websockets Support | ✅ activé |
+
+**DNS PiHole :**
+
+| Domain | IP |
+|---|---|
+| `portainer.home.lab` | `10.10.30.10` (NPM) |
+
+---
+
+## 7. Ajouter un nouvel environnement Docker
+
+Pour chaque nouvelle VM Docker à gérer depuis Portainer, répéter les étapes 4 et 5 :
+
+1. Déployer l'agent sur la VM cible (section 4)
+2. Ajouter la règle firewall MGMT → VM cible:9001
+3. Enregistrer l'environnement dans Portainer (section 5)
+
+---
+
+## 8. Ajouter un nouveau conteneur
+
+### Via docker-compose (recommandé)
+
+Tous les services sont organisés dans `/opt/docker/<service>/docker-compose.yml`.
+
+```bash
+mkdir -p /opt/docker/<service>
+nano /opt/docker/<service>/docker-compose.yml
+cd /opt/docker/<service>
+docker compose up -d
+```
+
+### Via l'interface Portainer
+
+1. Sélectionner l'environnement cible
+2. **Stacks → Add stack**
+3. Coller le contenu du `docker-compose.yml`
+4. **Deploy the stack**
+
+> ⚠️ Préférer la gestion par fichiers sur le disque pour garder une source de vérité GitLab.
