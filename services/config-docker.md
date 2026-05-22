@@ -1,15 +1,4 @@
-# Installation Docker — Debian 12
-
-**VM cible :** `vm-svc-01` (ou tout clone du template Debian 12)  
-**IP :** `10.10.30.10/24` | **Gateway :** `10.10.30.1` | **User :** `dani`
-
----
-
-## Prérequis
-
-- VM Debian 12 installée et accessible en SSH
-- Connectivité Internet vérifiée (`apt update` fonctionnel)
-- User `dani` avec accès `sudo`
+# Installation Docker 
 
 ---
 
