@@ -1,4 +1,4 @@
-# Procédure — Ajouter un nouveau service (DNS + Proxy)
+# Ajouter un nouveau service (DNS + Proxy)
 
 Cette procédure s'applique à chaque fois qu'un nouveau service est déployé et doit être accessible depuis le LAN via une URL propre.
 
@@ -109,18 +109,6 @@ Port dst : WEB (80, 443)
 Descr    : <VLAN> to NPM proxy
 ```
 
----
-
-## Checklist complète
-
-```
-□ Enregistrement DNS ajouté dans PiHole (→ 10.10.30.10)
-□ Proxy host créé dans NPM (domaine + backend + port)
-□ Règle pfSense ajoutée si service dans autre VLAN
-□ Test depuis le PC : http://monservice.home.lab
-□ Vérification dans PiHole Query Log (requête DNS visible)
-□ Vérification dans NPM Logs (requête HTTP visible)
-```
 
 ---
 
